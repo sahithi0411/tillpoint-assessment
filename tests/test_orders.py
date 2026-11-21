@@ -31,11 +31,40 @@ class OrderDeskTest(unittest.TestCase):
             self.app.orders.create("ana", [("TEE", 4)])
         self.assertEqual(self.app.catalog.get_product("TEE").stock, 3)
 
+    
     def test_payment_marks_order_paid(self):
         order = self.app.orders.create("ana", [("MUG", 1)])
+
         status, payload = self.app.handle("POST", "/webhooks/payments", {
-            "id": "evt_1", "type": "payment.succeeded", "order_id": order["id"], "amount_cents": 1200})
+            "id": "evt_1",
+            "type": "payment.succeeded",
+            "order_id": order["id"],
+            "amount_cents": 1200
+        })
+
         self.assertEqual((status, payload["status"]), (200, "paid"))
+
+    def test_duplicate_payment_event_is_not_counted_twice(self):
+        order = self.app.orders.create("ana", [("MUG", 1)])
+
+        event = {
+            "id": "evt_duplicate",
+            "type": "payment.succeeded",
+            "order_id": order["id"],
+            "amount_cents": 1200
+        }
+
+        self.app.payments.handle_event(event)
+        self.app.payments.handle_event(event)
+
+        self.assertEqual(self.app.payments.paid_cents(order["id"]), 1200)
+
+        payment_count = self.conn.execute(
+            "SELECT COUNT(*) FROM payments WHERE order_id = ?",
+            (order["id"],)
+        ).fetchone()[0]
+
+        self.assertEqual(payment_count, 1)
 
     def test_cancel_paid_order_restocks(self):
         order = self.app.orders.create("ana", [("TEE", 2)])

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_event_id ON payments(event_id);
 """
 
 
