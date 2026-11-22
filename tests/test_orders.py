@@ -133,6 +133,22 @@ class OrderDeskTest(unittest.TestCase):
         self.assertEqual(order["tax_cents"], 78)
         self.assertEqual(order["total_cents"], 1158)
 
+    def test_daily_sales_uses_india_local_day(self):
+        order = self.app.orders.create("ana", [("MUG", 1)])
+        morning_ist = datetime(2025, 3, 10, 0, 30, tzinfo=timezone.utc)
+        self.app.payments.handle_event(
+            {
+                "id": "evt_india_morning",
+                "type": "payment.succeeded",
+                "order_id": order["id"],
+                "amount_cents": 1200
+            },
+            now=morning_ist
+        )
+        self.assertEqual(
+            reports.daily_sales(self.conn, "2025-03-10", utc_offset_minutes=330),
+            {"day": "2025-03-10", "revenue_cents": 1200, "orders": 1}
+        )
 
 if __name__ == "__main__":
     unittest.main()
