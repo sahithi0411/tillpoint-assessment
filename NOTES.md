@@ -118,4 +118,20 @@ Commits: f9b1a5e
 
 AI tools used: ChatGPT.
 
-Session log files: TODO  add the actual full conversation export files inside session_logs/ and list each filename here.
+Session log files:
+
+Full_Stack_Developer_1_excerpt.md
+
+Full_Stack_Developer_1_recovered.md
+
+Full_Stack_Developer_2_recovered.md
+
+Full_Stack_Developer_3_recovered.md
+
+Full_Stack_Developer_4_recovered.md
+
+Full_Stack_Developer_5_recovered.md
+
+Full_Stack_Developer_6_recovered.md
+
+Note: These files contain partial recovered conversation excerpts, not complete original transcripts. A ChatGPT data export has been requested, but the download is not yet available.
