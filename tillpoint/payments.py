@@ -40,8 +40,6 @@ class Payments:
                 db.to_iso(now or db.utcnow()),
             ),
         )
-
-
         if cursor.rowcount == 0:
             return order["status"]
 
@@ -68,3 +66,20 @@ class Payments:
         ).fetchone()
 
         return row["paid"]
+
+    def payment_summary(self, order_id):
+        """Return the amount received and any amount paid above the order total."""
+        order = self.conn.execute(
+            "SELECT total_cents FROM orders WHERE id = ?",
+            (order_id,)
+        ).fetchone()
+
+        if order is None:
+            raise PaymentError(f"unknown order {order_id}")
+
+        paid = self.paid_cents(order_id)
+
+        return {
+            "paid_cents": paid,
+            "overpaid_cents": max(0, paid - order["total_cents"])
+        }

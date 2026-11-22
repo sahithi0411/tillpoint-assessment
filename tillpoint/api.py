@@ -38,7 +38,13 @@ class App:
                 self.catalog.update_price(m.group(1), body["price_cents"])
                 return 200, {"sku": m.group(1), "price_cents": body["price_cents"]}
             if method == "POST" and path == "/webhooks/payments":
-                return 200, {"status": self.payments.handle_event(body)}
+                status = self.payments.handle_event(body)
+                response = {"status": status}
+                if body.get("type") == "payment.succeeded":
+                    response.update(
+                        self.payments.payment_summary(body["order_id"])
+                    )
+                return 200, response
             m = re.fullmatch(r"/reports/daily/(\d{4}-\d{2}-\d{2})", path)
             if method == "GET" and m:
                 return 200, reports.daily_sales(self.conn, m.group(1), int(body.get("utc_offset_minutes", 0)))

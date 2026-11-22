@@ -166,5 +166,34 @@ class OrderDeskTest(unittest.TestCase):
 
         self.assertEqual(row["stock"], 0)
 
+    def test_two_genuine_payments_record_overpayment(self):
+        order = self.app.orders.create("ana", [("MUG", 1)])
+        first_payment = {
+            "id": "evt_first_payment",
+            "type": "payment.succeeded",
+            "order_id": order["id"],
+            "amount_cents": 1200
+        }
+        second_payment = {
+            "id": "evt_second_payment",
+            "type": "payment.succeeded",
+            "order_id": order["id"],
+            "amount_cents": 1200
+        }
+        self.app.handle("POST", "/webhooks/payments", first_payment)
+        status, response = self.app.handle(
+            "POST", "/webhooks/payments", second_payment
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response["status"], "paid")
+        self.assertEqual(response["paid_cents"], 2400)
+        self.assertEqual(response["overpaid_cents"], 1200)
+        self.assertEqual(self.app.payments.paid_cents(order["id"]), 2400)
+        payment_count = self.conn.execute(
+            "SELECT COUNT(*) AS count FROM payments WHERE order_id = ?",
+            (order["id"],)
+        ).fetchone()["count"]
+        self.assertEqual(payment_count, 2)
+
 if __name__ == "__main__":
     unittest.main()
