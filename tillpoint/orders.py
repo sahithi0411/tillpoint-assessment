@@ -1,4 +1,5 @@
 """Creating, cancelling and listing orders."""
+from datetime import timedelta
 from . import db, pricing
 from .catalog import Catalog
 
@@ -11,6 +12,39 @@ class Orders:
     def __init__(self, conn, catalog=None):
         self.conn = conn
         self.catalog = catalog or Catalog(conn)
+    def _expire_pending_orders(self, now):
+        """Expire pending orders that have been unpaid for at least 15 minutes."""
+        cutoff = db.to_iso(now - timedelta(minutes=15))
+
+        expired_orders = self.conn.execute(
+            """
+            SELECT id, coupon
+            FROM orders
+            WHERE status = 'pending' AND created_at <= ?
+            """,
+            (cutoff,)
+        ).fetchall()
+
+        for order in expired_orders:
+            items = self.conn.execute(
+                "SELECT sku, qty FROM order_items WHERE order_id = ?",
+                (order["id"],)
+            ).fetchall()
+
+            for item in items:
+                self.catalog.release(item["sku"], item["qty"])
+
+            if order["coupon"]:
+                self.conn.execute(
+                    "UPDATE coupons SET uses = uses - 1 WHERE code = ? AND uses > 0",
+                    (order["coupon"],)
+                )
+
+            self.conn.execute(
+                "UPDATE orders SET status = 'cancelled' WHERE id = ?",
+                (order["id"],)
+            )
+
 
     def create(self, customer, items, region="NONE", coupon_code=None, now=None):
         """items: list of (sku, qty). Reserves stock, redeems the coupon and stores the order, all or nothing."""
@@ -18,8 +52,12 @@ class Orders:
             raise OrderError("an order needs at least one item")
         if any(qty <= 0 for _, qty in items):
             raise OrderError("quantities must be positive")
+        now = now or db.utcnow()
+
         self.conn.execute("BEGIN IMMEDIATE")
         try:
+            self._expire_pending_orders(now)
+
             coupon = self._coupon(coupon_code)
             priced = [(sku, qty, self.catalog.get_product(sku).price_cents) for sku, qty in items]
             totals = pricing.price_order([(price, qty) for _, qty, price in priced], region, coupon)
@@ -31,7 +69,7 @@ class Orders:
                 "INSERT INTO orders (customer, region, coupon, subtotal_cents, discount_cents, tax_cents,"
                 " total_cents, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (customer, region, coupon_code, totals["subtotal_cents"], totals["discount_cents"],
-                 totals["tax_cents"], totals["total_cents"], db.to_iso(now or db.utcnow())),
+                 totals["tax_cents"], totals["total_cents"], db.to_iso(now)),
             )
             order_id = cur.lastrowid
             self.conn.executemany(
@@ -43,27 +81,37 @@ class Orders:
             self.conn.execute("ROLLBACK")
             raise
         return self.get(order_id)
-
     def cancel(self, order_id):
-        """Cancel an order that has not shipped. Its stock and its coupon use go back."""
+        """Cancel an order that has not shipped. Its stock and coupon use go back."""
         order = self.get(order_id)
         if order["status"] == "cancelled":
             return order
         if order["status"] == "shipped":
             raise OrderError("a shipped order cannot be cancelled")
+
         self.conn.execute("BEGIN IMMEDIATE")
         try:
-            if order["status"] == "paid":
+            if order["status"] in ("pending", "paid"):
                 for item in order["items"]:
                     self.catalog.release(item["sku"], item["qty"])
+
             if order["coupon"]:
-                self.conn.execute("UPDATE coupons SET uses = uses - 1 WHERE code = ? AND uses > 0", (order["coupon"],))
-            self.conn.execute("UPDATE orders SET status = 'cancelled' WHERE id = ?", (order_id,))
+                self.conn.execute(
+                    "UPDATE coupons SET uses = uses - 1 WHERE code = ? AND uses > 0",
+                    (order["coupon"],)
+                )
+
+            self.conn.execute(
+                "UPDATE orders SET status = 'cancelled' WHERE id = ?",
+                (order_id,)
+            )
             self.conn.execute("COMMIT")
         except Exception:
             self.conn.execute("ROLLBACK")
             raise
+
         return self.get(order_id)
+
 
     def ship(self, order_id):
         order = self.get(order_id)
