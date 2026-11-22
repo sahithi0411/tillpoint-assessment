@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from tillpoint import db, reports
 from tillpoint.api import App
-from tillpoint.catalog import OutOfStock
+from tillpoint.catalog import Catalog, OutOfStock
 
 
 class OrderDeskTest(unittest.TestCase):
@@ -149,6 +149,22 @@ class OrderDeskTest(unittest.TestCase):
             reports.daily_sales(self.conn, "2025-03-10", utc_offset_minutes=330),
             {"day": "2025-03-10", "revenue_cents": 1200, "orders": 1}
         )
+
+    def test_two_catalog_instances_cannot_oversell_stock(self):
+        self.app.catalog.add_product("LIMITED", "Limited Item", 500, stock=1)
+        worker_one = Catalog(self.conn)
+        worker_two = Catalog(self.conn)
+        self.assertEqual(worker_one.get_product("LIMITED").stock, 1)
+        self.assertEqual(worker_two.get_product("LIMITED").stock, 1)
+        worker_one.reserve("LIMITED", 1)
+        with self.assertRaises(OutOfStock):
+            worker_two.reserve("LIMITED", 1)
+        row = self.conn.execute(
+            "SELECT stock FROM products WHERE sku = ?",
+            ("LIMITED",)
+        ).fetchone()
+
+        self.assertEqual(row["stock"], 0)
 
 if __name__ == "__main__":
     unittest.main()

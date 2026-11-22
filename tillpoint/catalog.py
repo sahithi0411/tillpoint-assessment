@@ -52,10 +52,27 @@ class Catalog:
 
     def reserve(self, sku, qty):
         """Take qty units out of stock, or raise OutOfStock."""
-        product = self.get_product(sku)
-        if product.stock < qty:
-            raise OutOfStock(sku, qty, product.stock)
-        self.conn.execute("UPDATE products SET stock = stock - ? WHERE sku = ?", (qty, sku))
+        cur = self.conn.execute(
+            """
+            UPDATE products
+            SET stock = stock - ?
+            WHERE sku = ? AND stock >= ?
+            """,
+            (qty, sku, qty)
+        )
+
+        if cur.rowcount == 0:
+            row = self.conn.execute(
+                "SELECT stock FROM products WHERE sku = ?",
+                (sku,)
+            ).fetchone()
+
+            if row is None:
+                raise UnknownProduct(sku)
+
+            self._cache.pop(sku, None)
+            raise OutOfStock(sku, qty, row["stock"])
+
         self._cache.pop(sku, None)
 
     def release(self, sku, qty):
