@@ -120,6 +120,19 @@ class OrderDeskTest(unittest.TestCase):
         self.app.handle("PUT", "/products/MUG", {"price_cents": 1500})
         self.assertEqual(self.app.catalog.get_product("MUG").price_cents, 1500)
 
+    def test_coupon_tax_is_calculated_after_discount(self):
+        order = self.app.orders.create(
+        "ana",
+        [("MUG", 1)],
+        region="CA",
+        coupon_code="TEN"
+        )
+
+        self.assertEqual(order["subtotal_cents"], 1200)
+        self.assertEqual(order["discount_cents"], 120)
+        self.assertEqual(order["tax_cents"], 78)
+        self.assertEqual(order["total_cents"], 1158)
+
 
 if __name__ == "__main__":
     unittest.main()
