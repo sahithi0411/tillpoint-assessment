@@ -1,5 +1,6 @@
 """Run the API: python3 server.py [db-file] [port]"""
 import json
+import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -26,5 +27,5 @@ def make_handler(app):
 
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else "tillpoint.db"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
-    HTTPServer(("127.0.0.1", port), make_handler(App(db.connect(path)))).serve_forever()
+    port = int(os.environ.get("PORT", sys.argv[2] if len(sys.argv) > 2 else 8000))
+    HTTPServer(("0.0.0.0", port), make_handler(App(db.connect(path)))).serve_forever()
